@@ -3,8 +3,10 @@ package ccloud
 import (
 	"fmt"
 	"log"
+	"time"
 
 	ccloud "github.com/cgroschupp/go-client-confluent-cloud/confluentcloud"
+	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/helper/schema"
 )
 
@@ -137,14 +139,57 @@ func clusterCreate(d *schema.ResourceData, meta interface{}) error {
 		log.Printf("[ERROR] createCluster failed %v, %s", req, err)
 		return err
 	}
-
 	d.SetId(cluster.ID)
+
+	stateConf := &resource.StateChangeConf{
+		Pending:      []string{"Pending"},
+		Target:       []string{"Ready"},
+		Refresh:      clusterReady(c, d.Id(), accountID),
+		Timeout:      300 * time.Second,
+		Delay:        3 * time.Second,
+		PollInterval: 2 * time.Second,
+		MinTimeout:   20 * time.Second,
+	}
+	_, err = stateConf.WaitForState()
+
+	if err != nil {
+		return fmt.Errorf("Error waiting for cluster (%s) to be ready: %s", d.Id(), err)
+	}
+
 	err = d.Set("bootstrap_servers", cluster.Endpoint)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func clusterReady(client *ccloud.Client, clusterID, accountID string) resource.StateRefreshFunc {
+	return func() (result interface{}, s string, err error) {
+		cluster, err := client.GetCluster(clusterID, accountID)
+
+		log.Printf("[DEBUG] Waiting for Cluster to be UP: current status %s", cluster.Status)
+		log.Printf("[DEBUG] Can we connect to %s, created %s", cluster.Endpoint, cluster.Deployment.Created)
+
+		if err != nil {
+			return cluster, "UNKNOWN", err
+		}
+
+		if cluster.Status == "UP" {
+			// this doesn't actually mean it's ready to receive requests :(
+			if canConnect(cluster.Endpoint) {
+				return cluster, "Ready", nil
+			}
+		}
+
+		return cluster, "Pending", nil
+	}
+}
+
+func canConnect(connection string) bool {
+	time.Sleep(90 * time.Second)
+
+	return true
 }
 
 func clusterDelete(d *schema.ResourceData, meta interface{}) error {
@@ -176,7 +221,7 @@ func clusterRead(d *schema.ResourceData, meta interface{}) error {
 		err = d.Set("availability", cluster.Durability)
 	}
 	if err == nil {
-		err = d.Set("deployment", map[string]interface{}{ "sku": cluster.Deployment.Sku })
+		err = d.Set("deployment", map[string]interface{}{"sku": cluster.Deployment.Sku})
 	}
 	if err == nil {
 		err = d.Set("storage", cluster.Storage)
