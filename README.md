@@ -29,6 +29,7 @@ resource "confluentcloud_kafka_cluster" "test" {
 resource "confluentcloud_api_key" "provider_test" {
   cluster_id     = confluentcloud_kafka_cluster.test.id
   environment_id = confluentcloud_environment.environment.id
+  user_id        = confluentcloud_service_account.test.id
 }
 
 resource "confluentcloud_service_account" "test" {

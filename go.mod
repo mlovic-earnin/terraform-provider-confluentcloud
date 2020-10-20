@@ -2,6 +2,8 @@ module github.com/Mongey/terraform-provider-confluentcloud
 
 go 1.12
 
+replace github.com/cgroschupp/go-client-confluent-cloud => /home/marko/go/src/github.com/cgroschupp/go-client-confluent-cloud 
+
 require (
 	github.com/cgroschupp/go-client-confluent-cloud v0.0.0-20200525125748-b0492510d3f8
 	github.com/go-resty/resty/v2 v2.2.0 // indirect
